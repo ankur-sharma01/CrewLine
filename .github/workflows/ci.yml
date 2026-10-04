@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # real mongo for the tests (they wipe *_test databases)
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_MONGO_URI: mongodb://localhost:27017/basecampy_test
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci
+          npm --prefix client ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: API tests
+        run: npm test
+
+      - name: Frontend tests
+        run: npm --prefix client test
+
+      - name: Build the frontend
+        run: npm --prefix client run build
+
+      # report vulnerable deps but don't fail the build
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
