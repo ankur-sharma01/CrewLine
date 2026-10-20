@@ -6,17 +6,33 @@ export const app = (await import("../src/app.js")).default;
 export const API = "/api/v1";
 
 export const clearDb = async () => {
-  await connectDB();
-  const collections = await mongoose.connection.db.collections();
-  await Promise.all(collections.map((c) => c.deleteMany({})));
+  if (mongoose.connection.readyState === 0) {
+    await connectDB();
+  }
+
+  if (mongoose.connection.db) {
+    try {
+      await mongoose.connection.db.dropDatabase();
+    } catch {
+      // Some test environments may have no database selected yet; fall back to deleting collections.
+      const collections = await mongoose.connection.db.collections();
+      await Promise.all(collections.map((c) => c.deleteMany({})));
+    }
+  }
+
   globalThis.__mails.length = 0;
 };
 
 export const closeDb = async () => {
-  await mongoose.disconnect();
+  if (mongoose.connection.readyState) {
+    await mongoose.connection.close();
+  }
+
   const cache = globalThis.__mongooseCache;
-  cache.conn = null;
-  cache.promise = null;
+  if (cache) {
+    cache.conn = null;
+    cache.promise = null;
+  }
 };
 
 // last email sent to an address
